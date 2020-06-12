@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
+	"os"
 
 	"example.com/cnp/server/goscp"
 
@@ -20,15 +22,54 @@ func main() {
 
 	app := fiber.New()
 
+	var pasteImage image.Image
+
+	mode := 0 // 0 - production mode; 1 - presentation mode; 2 - debug mode
+
 	app.Post("/image", func(c *fiber.Ctx) {
 		file, err := c.FormFile("data")
 
-		if err == nil {
-			c.SaveFile(file, "image.jpg")
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		c.SaveFile(file, "image.jpg")
+
+		fileOpened, err := file.Open()
+		defer fileOpened.Close()
+
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		pasteImage, _, err = image.Decode(fileOpened)
+
+		if err != nil {
+			log.Println(err.Error())
+			return
 		}
 	})
 
 	app.Post("/view", func(c *fiber.Ctx) {
+		if pasteImage == nil {
+			file, err := os.Open("image.jpg")
+			defer file.Close()
+
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
+
+			pasteImage, _, err = image.Decode(file)
+
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
+		}
+
 		file, err := c.FormFile("data")
 
 		if err != nil {
@@ -39,6 +80,7 @@ func main() {
 		// c.SaveFile(file, "view.jpg")
 
 		fileOpened, err := file.Open()
+		defer fileOpened.Close()
 
 		if err != nil {
 			log.Println(err.Error())
@@ -58,16 +100,39 @@ func main() {
 			log.Println(err.Error())
 			return
 		}
-		/*
-			x, y, err := goscp.FindPoint(view, screen)
+
+		if mode == 0 {
+			points := make([]image.Point, 5)
+
+			imageWidth := pasteImage.Bounds().Max.X
+			imageHeight := pasteImage.Bounds().Max.Y
+
+			points[0] = image.Point{(view.Bounds().Max.X - 1) / 2, (view.Bounds().Max.Y - 1) / 2} // Center
+			points[1] = image.Point{points[0].X - imageWidth/2, points[0].Y - imageHeight/2}      // Left-Top
+			points[2] = image.Point{points[0].X + imageWidth/2, points[0].Y - imageHeight/2}      // Right-Top
+			points[3] = image.Point{points[0].X - imageWidth/2, points[0].Y + imageHeight/2}      // Left-Bottom
+			points[4] = image.Point{points[0].X + imageWidth/2, points[0].Y + imageHeight/2}      // Right-Bottom
+
+			reflectedPoints, err := goscp.FindPoints(view, screen, points)
 
 			if err != nil {
 				log.Println(err.Error())
 				return
 			}
-		*/
 
-		goscp.DebugFindPoint(view, screen)
+			fmt.Println(reflectedPoints)
+		}
+
+		// TODO: Add presentation mode
+		if mode == 1 {
+
+		}
+
+		// TODO: Add debug mode
+		if mode == 2 {
+
+		}
+
 	})
 
 	// Start server
