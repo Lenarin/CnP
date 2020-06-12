@@ -24,7 +24,7 @@ func main() {
 
 	var pasteImage image.Image
 
-	mode := 0 // 0 - production mode; 1 - presentation mode; 2 - debug mode
+	mode := 2 // 0 - production mode; 1 - presentation mode; 2 - debug mode
 
 	app.Post("/image", func(c *fiber.Ctx) {
 		file, err := c.FormFile("data")
@@ -34,7 +34,7 @@ func main() {
 			return
 		}
 
-		c.SaveFile(file, "image.jpg")
+		c.SaveFile(file, "image.png")
 
 		fileOpened, err := file.Open()
 		defer fileOpened.Close()
@@ -54,7 +54,7 @@ func main() {
 
 	app.Post("/view", func(c *fiber.Ctx) {
 		if pasteImage == nil {
-			file, err := os.Open("image.jpg")
+			file, err := os.Open("image.png")
 			defer file.Close()
 
 			if err != nil {
@@ -113,7 +113,9 @@ func main() {
 			points[3] = image.Point{points[0].X - imageWidth/2, points[0].Y + imageHeight/2}      // Left-Bottom
 			points[4] = image.Point{points[0].X + imageWidth/2, points[0].Y + imageHeight/2}      // Right-Bottom
 
-			reflectedPoints, err := goscp.FindPoints(view, screen, points)
+			temp := image.Image(screen)
+
+			reflectedPoints, err := goscp.FindPoints(&view, &temp, points)
 
 			if err != nil {
 				log.Println(err.Error())
@@ -130,7 +132,8 @@ func main() {
 
 		// TODO: Add debug mode
 		if mode == 2 {
-
+			temp := image.Image(screen)
+			goscp.DebugFindPoints(&view, &temp)
 		}
 
 	})

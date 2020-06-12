@@ -9,14 +9,14 @@ import (
 	"gocv.io/x/gocv"
 )
 
-func rgbaToGray(img image.Image) *image.Gray {
+func rgbaToGray(img *image.Image) *image.Gray {
 	var (
-		bounds = img.Bounds()
+		bounds = (*img).Bounds()
 		gray   = image.NewGray(bounds)
 	)
 	for x := 0; x < bounds.Max.X; x++ {
 		for y := 0; y < bounds.Max.Y; y++ {
-			var rgba = img.At(x, y)
+			var rgba = (*img).At(x, y)
 			gray.Set(x, y, rgba)
 		}
 	}
@@ -24,7 +24,9 @@ func rgbaToGray(img image.Image) *image.Gray {
 }
 
 // FindPoints - find corresponding point of center of view on screen
-func FindPoints(viewImage image.Image, screenImage image.Image, points []image.Point) ([]image.Point, error) {
+//
+// Function will not corrupt your images
+func FindPoints(viewImage *image.Image, screenImage *image.Image, points []image.Point) ([]image.Point, error) {
 	view, err := gocv.ImageGrayToMatGray(rgbaToGray(viewImage))
 	defer view.Close()
 
@@ -94,20 +96,20 @@ func FindPoints(viewImage image.Image, screenImage image.Image, points []image.P
 
 	res := make([]image.Point, len(points))
 
-	for _, point := range points {
+	for i, point := range points {
 		src.SetDoubleAt(0, 0, float64(point.X))
 		src.SetDoubleAt(0, 1, float64(point.Y))
 
 		gocv.PerspectiveTransform(src, &dst, M)
 
-		res = append(res, image.Point{int(dst.GetDoubleAt(0, 0)), int(dst.GetDoubleAt(0, 1))})
+		res[i] = image.Point{int(dst.GetDoubleAt(0, 0)), int(dst.GetDoubleAt(0, 1))}
 	}
 
 	return res, nil
 }
 
 // DebugFindPoints - find points and open windows, where founded points are drawn
-func DebugFindPoints(viewImage image.Image, screenImage image.Image) {
+func DebugFindPoints(viewImage *image.Image, screenImage *image.Image) {
 	window1 := gocv.NewWindow("test1")
 	defer window1.Close()
 
@@ -116,7 +118,7 @@ func DebugFindPoints(viewImage image.Image, screenImage image.Image) {
 
 	points := make([]image.Point, 5)
 
-	points[0] = image.Point{(viewImage.Bounds().Max.X - 1) / 2, (viewImage.Bounds().Max.Y - 1) / 2}
+	points[0] = image.Point{((*viewImage).Bounds().Max.X - 1) / 2, ((*viewImage).Bounds().Max.Y - 1) / 2}
 	points[1] = image.Point{points[0].X - 250, points[0].Y - 250}
 	points[2] = image.Point{points[0].X + 250, points[0].Y - 250}
 	points[3] = image.Point{points[0].X - 250, points[0].Y + 250}
@@ -124,9 +126,9 @@ func DebugFindPoints(viewImage image.Image, screenImage image.Image) {
 
 	matchedPoints, err := FindPoints(viewImage, screenImage, points)
 
-	photoMat, _ := gocv.ImageToMatRGBA(viewImage)
+	photoMat, _ := gocv.ImageToMatRGBA(*viewImage)
 	defer photoMat.Close()
-	screenMat, _ := gocv.ImageToMatRGBA(screenImage)
+	screenMat, _ := gocv.ImageToMatRGBA(*screenImage)
 	defer screenMat.Close()
 
 	if err != nil {
@@ -134,12 +136,22 @@ func DebugFindPoints(viewImage image.Image, screenImage image.Image) {
 	}
 
 	for _, point := range points {
-		gocv.Circle(&photoMat, point, 2, color.RGBA{0, 255, 0, 0}, 2)
+		gocv.Circle(&photoMat, point, 5, color.RGBA{255, 0, 0, 0}, -1)
 	}
 
+	gocv.Line(&photoMat, points[1], points[2], color.RGBA{0, 255, 0, 0}, 2)
+	gocv.Line(&photoMat, points[1], points[3], color.RGBA{0, 255, 0, 0}, 2)
+	gocv.Line(&photoMat, points[3], points[4], color.RGBA{0, 255, 0, 0}, 2)
+	gocv.Line(&photoMat, points[4], points[2], color.RGBA{0, 255, 0, 0}, 2)
+
 	for _, point := range matchedPoints {
-		gocv.Circle(&screenMat, point, 2, color.RGBA{0, 255, 0, 0}, 2)
+		gocv.Circle(&screenMat, point, 5, color.RGBA{255, 0, 0, 0}, -1)
 	}
+
+	gocv.Line(&screenMat, matchedPoints[1], matchedPoints[2], color.RGBA{0, 255, 0, 0}, 2)
+	gocv.Line(&screenMat, matchedPoints[1], matchedPoints[3], color.RGBA{0, 255, 0, 0}, 2)
+	gocv.Line(&screenMat, matchedPoints[3], matchedPoints[4], color.RGBA{0, 255, 0, 0}, 2)
+	gocv.Line(&screenMat, matchedPoints[2], matchedPoints[4], color.RGBA{0, 255, 0, 0}, 2)
 
 	window1.IMShow(photoMat)
 	window2.IMShow(screenMat)
