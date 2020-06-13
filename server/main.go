@@ -1,14 +1,16 @@
 package main
 
 import (
-	"fmt"
 	"image"
 	_ "image/jpeg"
 	_ "image/png"
 	"log"
 	"os"
+	"path/filepath"
+	"runtime"
 
 	"example.com/cnp/server/goscp"
+	"example.com/cnp/server/ps"
 
 	"github.com/kbinani/screenshot"
 
@@ -16,15 +18,13 @@ import (
 )
 
 func main() {
-	// _, file, _, _ := runtime.Caller(0)
-
-	// res, _ := ps.PasteImage(filepath.Join(filepath.Dir(file), "test.jpg"), "test", 10, 10)
+	_, mainPath, _, _ := runtime.Caller(0)
 
 	app := fiber.New()
 
 	var pasteImage image.Image
 
-	mode := 2 // 0 - production mode; 1 - presentation mode; 2 - debug mode
+	mode := 0 // 0 - production mode; 1 - presentation mode; 2 - debug mode
 
 	app.Post("/image", func(c *fiber.Ctx) {
 		file, err := c.FormFile("data")
@@ -122,7 +122,12 @@ func main() {
 				return
 			}
 
-			fmt.Println(reflectedPoints)
+			_, err = ps.PasteImage(filepath.Join(filepath.Dir(mainPath), "image.png"), "test", reflectedPoints[1].X, reflectedPoints[1].Y)
+
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
 		}
 
 		// TODO: Add presentation mode
