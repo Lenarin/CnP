@@ -38,8 +38,8 @@ func init() {
 }
 
 // PasteImage - pastes image to photoshop
-func PasteImage(imgPath string, layerName string, x int, y int) ([]byte, error) {
-	return ExecJsxScript(filepath.Join(scriptsPath, "pasteAndMove.jsx"), imgPath, layerName, strconv.FormatInt(int64(x+20), 10), strconv.FormatInt(int64(y), 10))
+func PasteImage(imgPath string, layerName string, x int, y int, newWidth int, newHeight int) ([]byte, error) {
+	return ExecJsxScript(filepath.Join(scriptsPath, "pasteAndMove.jsx"), imgPath, layerName, strconv.FormatInt(int64(x), 10), strconv.FormatInt(int64(y), 10), strconv.FormatInt(int64(newWidth), 10), strconv.FormatInt(int64(newHeight), 10))
 }
 
 // ExecJsxScript - execute jsx script with given path

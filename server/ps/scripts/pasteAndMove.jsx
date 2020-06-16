@@ -1,4 +1,4 @@
-function pasteImage(filename, layerName, x, y) {
+function pasteImage(filename, layerName, x, y, newWidth, newHeight) {
 
 	function place(filename) {
 		var desc = new ActionDescriptor();
@@ -39,23 +39,19 @@ function pasteImage(filename, layerName, x, y) {
 		var startRulerUnits = app.preferences.rulerUnits;
 		app.preferences.rulerUnits = Units.PIXELS;
 
-		var bounds = getBounds()
-
-		alert(bounds.left + '\n' + bounds.right + '\n' + bounds.top + '\n' + bounds.bottom + '\n');
-
 		place(filename);
-		var imageWidhth = Number(activeDocument.activeLayer.bounds[2]) - Number(activeDocument.activeLayer.bounds[0]);
+		var imageWidth = Number(activeDocument.activeLayer.bounds[2]) - Number(activeDocument.activeLayer.bounds[0]);
 		var imageHeight = Number(activeDocument.activeLayer.bounds[3]) - Number(activeDocument.activeLayer.bounds[1]);
 
-		moveTo(x - imageWidhth / 2, y - imageHeight / 2);
-		activeDocument.activeLayer.name = layerName;
-		//activeDocument.activeLayer.resizeImage(50, 50);
-		//activeDocument.activeLayer.resizeCanvas(50, 50);
+		activeDocument.activeLayer.resize(newWidth / imageWidth * 100, newHeight / imageHeight * 100);
 
+		moveTo(x - newWidth / 2 - 60, y - newHeight / 2 - 60);
+		activeDocument.activeLayer.name = layerName;
+		
 		app.preferences.rulerUnits = startRulerUnits;
 	} catch (e) {
 		alert(e);
 	}
 }
 
-pasteImage(arguments[0], arguments[1], arguments[2], arguments[3])
+pasteImage(arguments[0], arguments[1], arguments[2], arguments[3], arguments[4], arguments[5])

@@ -122,7 +122,10 @@ func main() {
 				return
 			}
 
-			_, err = ps.PasteImage(filepath.Join(filepath.Dir(mainPath), "image.png"), "test", reflectedPoints[1].X, reflectedPoints[1].Y)
+			newWidth := (reflectedPoints[2].X - reflectedPoints[1].X + reflectedPoints[4].X - reflectedPoints[3].X) / 2
+			newHeight := (reflectedPoints[3].Y - reflectedPoints[1].Y + reflectedPoints[4].Y - reflectedPoints[2].Y) / 2
+
+			_, err = ps.PasteImage(filepath.Join(filepath.Dir(mainPath), "image.png"), "test", reflectedPoints[1].X, reflectedPoints[1].Y, newWidth, newHeight)
 
 			if err != nil {
 				log.Println(err.Error())
