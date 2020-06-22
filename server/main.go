@@ -1,9 +1,13 @@
 package main
 
 import (
+	"bytes"
+	"fmt"
 	"image"
 	_ "image/jpeg"
+	"image/png"
 	_ "image/png"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -12,6 +16,8 @@ import (
 	"example.com/cnp/server/goscp"
 	"example.com/cnp/server/ps"
 
+	"github.com/anthonynsimon/bild/blend"
+	"github.com/anthonynsimon/bild/fcolor"
 	"github.com/kbinani/screenshot"
 
 	"github.com/gofiber/fiber"
@@ -28,13 +34,10 @@ func main() {
 
 	app.Post("/image", func(c *fiber.Ctx) {
 		file, err := c.FormFile("data")
-
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
-
-		c.SaveFile(file, "image.png")
 
 		fileOpened, err := file.Open()
 		defer fileOpened.Close()
@@ -44,8 +47,52 @@ func main() {
 			return
 		}
 
-		pasteImage, _, err = image.Decode(fileOpened)
+		buf := bytes.NewBuffer(nil)
+		_, err = io.Copy(buf, fileOpened)
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
 
+		fmt.Println("Proceding image")
+		masked, err := ProcImage(buf.Bytes())
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		fmt.Println("Decode mask")
+		imageMask, _, err := image.Decode(bytes.NewReader(masked))
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		fileOpened.Seek(0, 0)
+
+		fmt.Println("Trying to open image..")
+		pasteImage, _, err = image.Decode(fileOpened)
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		cutedImage := blend.Blend(pasteImage, imageMask, func(a fcolor.RGBAF64, b fcolor.RGBAF64) fcolor.RGBAF64 {
+			var res fcolor.RGBAF64
+			res.A = b.B
+			res.B = a.B
+			res.G = a.G
+			res.R = a.R
+			return res
+		})
+
+		out, err := os.Create("./output.png")
+		if err != nil {
+			log.Println(err.Error())
+			return
+		}
+
+		err = png.Encode(out, cutedImage)
 		if err != nil {
 			log.Println(err.Error())
 			return
