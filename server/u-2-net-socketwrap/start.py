@@ -1,5 +1,6 @@
 from socket import *
-from PIL import Image
+from PIL import Image, ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 import fileinput
 import io
 import struct

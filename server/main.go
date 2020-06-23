@@ -62,7 +62,7 @@ func main() {
 		}
 
 		fmt.Println("Decode mask")
-		imageMask, _, err := image.Decode(bytes.NewReader(masked))
+		imageMask, err := png.Decode(bytes.NewReader(masked))
 		if err != nil {
 			log.Println(err.Error())
 			return
@@ -78,15 +78,12 @@ func main() {
 		}
 
 		cutedImage := blend.Blend(pasteImage, imageMask, func(a fcolor.RGBAF64, b fcolor.RGBAF64) fcolor.RGBAF64 {
-			var res fcolor.RGBAF64
-			res.A = b.B
-			res.B = a.B
-			res.G = a.G
-			res.R = a.R
-			return res
+			a.A = (b.R + b.G + b.B) / 3.0
+			return a
 		})
 
 		out, err := os.Create("./output.png")
+		defer out.Close()
 		if err != nil {
 			log.Println(err.Error())
 			return
@@ -97,6 +94,8 @@ func main() {
 			log.Println(err.Error())
 			return
 		}
+
+		c.SendFile("./output.png")
 	})
 
 	app.Post("/view", func(c *fiber.Ctx) {
