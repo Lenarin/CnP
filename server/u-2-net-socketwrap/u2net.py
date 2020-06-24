@@ -92,7 +92,7 @@ def run(orig_image):
     predict = predict.squeeze()
     predict_np = predict.cpu().data.numpy()
 
-    im = Image.fromarray(predict_np*255).convert('RGB')
+    im = Image.fromarray(predict_np*255).convert('RGB').convert('L')
     imo = im.resize((image.shape[1], image.shape[0]), resample=Image.BILINEAR)
 
     pb_np = np.array(imo)

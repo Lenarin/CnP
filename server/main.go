@@ -21,12 +21,18 @@ import (
 	"github.com/kbinani/screenshot"
 
 	"github.com/gofiber/fiber"
+	"github.com/gofiber/logger"
 )
 
 func main() {
 	_, mainPath, _, _ := runtime.Caller(0)
 
 	app := fiber.New()
+
+	app.Use(logger.New(logger.Config{
+		// Optional
+		Format: "${time} ${method} ${path} - ${ip} - ${status} - ${latency}\n",
+	}))
 
 	var pasteImage image.Image
 
@@ -96,6 +102,7 @@ func main() {
 		}
 
 		c.SendFile("./output.png")
+
 	})
 
 	app.Post("/view", func(c *fiber.Ctx) {
