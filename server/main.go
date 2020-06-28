@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 
 	"example.com/cnp/server/goscp"
 	"example.com/cnp/server/ps"
@@ -20,6 +21,7 @@ import (
 	"github.com/anthonynsimon/bild/fcolor"
 	"github.com/kbinani/screenshot"
 
+	"github.com/gofiber/cors"
 	"github.com/gofiber/fiber"
 	"github.com/gofiber/logger"
 )
@@ -29,10 +31,14 @@ func main() {
 
 	app := fiber.New()
 
+	app.Settings.BodyLimit = 16 * 1024 * 1024
+
 	app.Use(logger.New(logger.Config{
 		// Optional
 		Format: "${time} ${method} ${path} - ${ip} - ${status} - ${latency}\n",
 	}))
+
+	app.Use(cors.New())
 
 	var pasteImage image.Image
 
@@ -84,9 +90,36 @@ func main() {
 		}
 
 		cutedImage := blend.Blend(pasteImage, imageMask, func(a fcolor.RGBAF64, b fcolor.RGBAF64) fcolor.RGBAF64 {
-			a.A = (b.R + b.G + b.B) / 3.0
+			if (b.R + b.G + b.B) < 2.8 {
+				a.A = 0
+			} else {
+				a.A = (b.R + b.G + b.B) / 3.0
+			}
 			return a
 		})
+
+		origBounds := cutedImage.Bounds()
+		res := image.Rectangle{image.Point{origBounds.Min.X - 1, origBounds.Min.Y - 1}, image.Point{origBounds.Min.X - 1, origBounds.Min.Y - 1}}
+		for x := origBounds.Min.X; x < origBounds.Max.X; x++ {
+			for y := origBounds.Min.Y; y < origBounds.Max.Y; y++ {
+				if cutedImage.RGBAAt(x, y).A != 0 {
+					if res.Min.X == origBounds.Min.X-1 || x < res.Min.X {
+						res.Min.X = x
+					}
+					if res.Min.Y == origBounds.Min.Y-1 || y < res.Min.Y {
+						res.Min.Y = y
+					}
+					if y > res.Max.Y {
+						res.Max.Y = y
+					}
+					if x > res.Max.X {
+						res.Max.X = x
+					}
+				}
+			}
+		}
+
+		pasteImage = cutedImage.SubImage(res)
 
 		out, err := os.Create("./output.png")
 		defer out.Close()
@@ -95,19 +128,19 @@ func main() {
 			return
 		}
 
-		err = png.Encode(out, cutedImage)
+		err = png.Encode(out, pasteImage)
 		if err != nil {
 			log.Println(err.Error())
 			return
 		}
 
+		c.Set("Connection", "close")
 		c.SendFile("./output.png")
-
 	})
 
 	app.Post("/view", func(c *fiber.Ctx) {
 		if pasteImage == nil {
-			file, err := os.Open("image.png")
+			file, err := os.Open("output.png")
 			defer file.Close()
 
 			if err != nil {
@@ -123,6 +156,11 @@ func main() {
 			}
 		}
 
+		width, _ := strconv.Atoi(c.FormValue("width"))
+		height, _ := strconv.Atoi(c.FormValue("height"))
+		width /= 2
+		height /= 2
+
 		file, err := c.FormFile("data")
 
 		if err != nil {
@@ -132,70 +170,72 @@ func main() {
 
 		// c.SaveFile(file, "view.jpg")
 
-		fileOpened, err := file.Open()
-		defer fileOpened.Close()
-
-		if err != nil {
-			log.Println(err.Error())
-			return
-		}
-
-		view, _, err := image.Decode(fileOpened)
-
-		if err != nil {
-			log.Println(err.Error())
-			return
-		}
-
-		screen, err := screenshot.CaptureDisplay(0)
-
-		if err != nil {
-			log.Println(err.Error())
-			return
-		}
-
-		if mode == 0 {
-			points := make([]image.Point, 5)
-
-			imageWidth := pasteImage.Bounds().Max.X
-			imageHeight := pasteImage.Bounds().Max.Y
-
-			points[0] = image.Point{(view.Bounds().Max.X - 1) / 2, (view.Bounds().Max.Y - 1) / 2} // Center
-			points[1] = image.Point{points[0].X - imageWidth/2, points[0].Y - imageHeight/2}      // Left-Top
-			points[2] = image.Point{points[0].X + imageWidth/2, points[0].Y - imageHeight/2}      // Right-Top
-			points[3] = image.Point{points[0].X - imageWidth/2, points[0].Y + imageHeight/2}      // Left-Bottom
-			points[4] = image.Point{points[0].X + imageWidth/2, points[0].Y + imageHeight/2}      // Right-Bottom
-
-			temp := image.Image(screen)
-
-			reflectedPoints, err := goscp.FindPoints(&view, &temp, points)
+		go func() {
+			fileOpened, err := file.Open()
+			defer fileOpened.Close()
 
 			if err != nil {
 				log.Println(err.Error())
 				return
 			}
 
-			newWidth := (reflectedPoints[2].X - reflectedPoints[1].X + reflectedPoints[4].X - reflectedPoints[3].X) / 2
-			newHeight := (reflectedPoints[3].Y - reflectedPoints[1].Y + reflectedPoints[4].Y - reflectedPoints[2].Y) / 2
-
-			_, err = ps.PasteImage(filepath.Join(filepath.Dir(mainPath), "image.png"), "test", reflectedPoints[1].X, reflectedPoints[1].Y, newWidth, newHeight)
+			view, _, err := image.Decode(fileOpened)
 
 			if err != nil {
 				log.Println(err.Error())
 				return
 			}
-		}
 
-		// TODO: Add presentation mode
-		if mode == 1 {
+			screen, err := screenshot.CaptureDisplay(0)
 
-		}
+			if err != nil {
+				log.Println(err.Error())
+				return
+			}
 
-		// TODO: Add debug mode
-		if mode == 2 {
-			temp := image.Image(screen)
-			goscp.DebugFindPoints(&view, &temp)
-		}
+			log.Println("Start Calculating")
+			if mode == 0 {
+				points := make([]image.Point, 5)
+
+				points[0] = image.Point{(view.Bounds().Max.X - 1) / 2, (view.Bounds().Max.Y - 1) / 2} // Center
+				points[1] = image.Point{points[0].X - width/2, points[0].Y - height/2}                // Left-Top
+				points[2] = image.Point{points[0].X + width/2, points[0].Y - height/2}                // Right-Top
+				points[3] = image.Point{points[0].X - width/2, points[0].Y + height/2}                // Left-Bottom
+				points[4] = image.Point{points[0].X + width/2, points[0].Y + height/2}                // Right-Bottom
+
+				temp := image.Image(screen)
+
+				reflectedPoints, err := goscp.FindPoints(&view, &temp, points)
+
+				if err != nil {
+					log.Println(err.Error())
+					return
+				}
+
+				//newWidth := (reflectedPoints[2].X - reflectedPoints[1].X + reflectedPoints[4].X - reflectedPoints[3].X) / 2
+				//newHeight := (reflectedPoints[3].Y - reflectedPoints[1].Y + reflectedPoints[4].Y - reflectedPoints[2].Y) / 2
+				log.Println("End Calculating")
+
+				log.Println("Send to Photoshop")
+				_, err = ps.PasteImage(filepath.Join(filepath.Dir(mainPath), "output.png"), "test", reflectedPoints[1].X, reflectedPoints[1].Y, width, height)
+
+				if err != nil {
+					log.Println(err.Error())
+					return
+				}
+			}
+
+			// TODO: Add presentation mode
+			if mode == 1 {
+
+			}
+
+			// TODO: Add debug mode
+			if mode == 2 {
+				temp := image.Image(screen)
+				goscp.DebugFindPoints(&view, &temp, width, height)
+			}
+		}()
 
 	})
 

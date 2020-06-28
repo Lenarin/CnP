@@ -7,6 +7,8 @@ import (
 	"log"
 
 	"gocv.io/x/gocv"
+
+	x "gocv.io/x/gocv/contrib"
 )
 
 func rgbaToGray(img *image.Image) *image.Gray {
@@ -41,14 +43,14 @@ func FindPoints(viewImage *image.Image, screenImage *image.Image, points []image
 		return nil, err
 	}
 
-	orb := gocv.NewORB()
-	defer orb.Close()
+	sift := x.NewSIFT()
+	defer sift.Close()
 
 	bf := gocv.NewBFMatcher()
 	defer bf.Close()
 
-	kpView, desView := orb.DetectAndCompute(view, gocv.NewMat())
-	kpScreen, desScreen := orb.DetectAndCompute(screen, gocv.NewMat())
+	kpView, desView := sift.DetectAndCompute(view, gocv.NewMat())
+	kpScreen, desScreen := sift.DetectAndCompute(screen, gocv.NewMat())
 
 	matches := bf.KnnMatch(desView, desScreen, 2)
 
@@ -57,14 +59,16 @@ func FindPoints(viewImage *image.Image, screenImage *image.Image, points []image
 
 	good := make([]gocv.DMatch, 1)
 	for _, m := range matches {
-		if m[0].Distance < 0.75*m[1].Distance {
+		if m[0].Distance < 0.7*m[1].Distance {
 			good = append(good, m[0])
 			tkpView = append(tkpView, kpView[m[0].QueryIdx])
 			tkpScreen = append(tkpScreen, kpScreen[m[0].TrainIdx])
 		}
 	}
 
-	if len(good) < 3 {
+	log.Println(len(good))
+
+	if len(good) < 6 {
 		return nil, errors.New("Not enougt points found")
 	}
 
@@ -109,7 +113,7 @@ func FindPoints(viewImage *image.Image, screenImage *image.Image, points []image
 }
 
 // DebugFindPoints - find points and open windows, where founded points are drawn
-func DebugFindPoints(viewImage *image.Image, screenImage *image.Image) {
+func DebugFindPoints(viewImage *image.Image, screenImage *image.Image, width int, height int) {
 	window1 := gocv.NewWindow("test1")
 	defer window1.Close()
 
@@ -119,12 +123,17 @@ func DebugFindPoints(viewImage *image.Image, screenImage *image.Image) {
 	points := make([]image.Point, 5)
 
 	points[0] = image.Point{((*viewImage).Bounds().Max.X - 1) / 2, ((*viewImage).Bounds().Max.Y - 1) / 2}
-	points[1] = image.Point{points[0].X - 250, points[0].Y - 250}
-	points[2] = image.Point{points[0].X + 250, points[0].Y - 250}
-	points[3] = image.Point{points[0].X - 250, points[0].Y + 250}
-	points[4] = image.Point{points[0].X + 250, points[0].Y + 250}
+	points[1] = image.Point{points[0].X - width, points[0].Y - height}
+	points[2] = image.Point{points[0].X + width, points[0].Y - height}
+	points[3] = image.Point{points[0].X - width, points[0].Y + height}
+	points[4] = image.Point{points[0].X + width, points[0].Y + height}
 
 	matchedPoints, err := FindPoints(viewImage, screenImage, points)
+
+	if err != nil {
+		log.Println(err.Error())
+		return
+	}
 
 	photoMat, _ := gocv.ImageToMatRGBA(*viewImage)
 	defer photoMat.Close()
@@ -152,6 +161,13 @@ func DebugFindPoints(viewImage *image.Image, screenImage *image.Image) {
 	gocv.Line(&screenMat, matchedPoints[1], matchedPoints[3], color.RGBA{0, 255, 0, 0}, 2)
 	gocv.Line(&screenMat, matchedPoints[3], matchedPoints[4], color.RGBA{0, 255, 0, 0}, 2)
 	gocv.Line(&screenMat, matchedPoints[2], matchedPoints[4], color.RGBA{0, 255, 0, 0}, 2)
+
+	newWidth := (matchedPoints[2].X - matchedPoints[1].X + matchedPoints[4].X - matchedPoints[3].X) / 2
+	newHeight := (matchedPoints[3].Y - matchedPoints[1].Y + matchedPoints[4].Y - matchedPoints[2].Y) / 2
+	log.Println("End Calculating")
+
+	log.Printf("[DEBUG] Width: %v\n", newWidth)
+	log.Printf("[DEBUG] Height: %v\n", newHeight)
 
 	window1.IMShow(photoMat)
 	window2.IMShow(screenMat)

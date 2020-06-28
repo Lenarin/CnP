@@ -18,22 +18,6 @@ function pasteImage(filename, layerName, x, y, newWidth, newHeight) {
 		executeAction(stringIDToTypeID("transform"), desc, DialogModes.ERROR);
 	}
 
-	function getBounds() {
-		var ref = new ActionReference();
-		ref.putProperty(stringIDToTypeID("property"), stringIDToTypeID("viewInfo"));
-		ref.putEnumerated(stringIDToTypeID("document"), stringIDToTypeID("ordinal"), stringIDToTypeID("targetEnum"));
-		var desc = executeActionGet(ref);
-
-		var bounds = desc.getObjectValue(stringIDToTypeID('viewInfo')).getObjectValue(stringIDToTypeID('activeView')).getObjectValue(stringIDToTypeID('globalBounds'));
-
-		var left = bounds.getDouble(stringIDToTypeID('left'));
-		var right = bounds.getDouble(stringIDToTypeID('right'))
-		var top = bounds.getDouble(stringIDToTypeID('top'))
-		var bottom = bounds.getDouble(stringIDToTypeID('bottom'))
-
-		return { left: left, right: right, top: top, bottom: bottom }
-	}
-
 
 	try {
 		var startRulerUnits = app.preferences.rulerUnits;
@@ -47,7 +31,7 @@ function pasteImage(filename, layerName, x, y, newWidth, newHeight) {
 
 		moveTo(x - newWidth / 2 - 60, y - newHeight / 2 - 60);
 		activeDocument.activeLayer.name = layerName;
-		
+
 		app.preferences.rulerUnits = startRulerUnits;
 	} catch (e) {
 		alert(e);
