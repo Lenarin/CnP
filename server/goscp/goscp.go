@@ -5,6 +5,7 @@ import (
 	"image"
 	"image/color"
 	"log"
+	"sync"
 
 	"gocv.io/x/gocv"
 
@@ -29,28 +30,40 @@ func rgbaToGray(img *image.Image) *image.Gray {
 //
 // Function will not corrupt your images
 func FindPoints(viewImage *image.Image, screenImage *image.Image, points []image.Point) ([]image.Point, error) {
-	view, err := gocv.ImageGrayToMatGray(rgbaToGray(viewImage))
-	defer view.Close()
+	var wg sync.WaitGroup
+	wg.Add(2)
 
-	if err != nil {
-		return nil, err
-	}
+	var kpView, kpScreen []gocv.KeyPoint
+	var desView, desScreen gocv.Mat
 
-	screen, err := gocv.ImageGrayToMatGray(rgbaToGray(screenImage))
-	defer screen.Close()
+	go func() {
+		sift := x.NewSIFT()
+		defer sift.Close()
 
-	if err != nil {
-		return nil, err
-	}
+		view, _ := gocv.ImageGrayToMatGray(rgbaToGray(viewImage))
+		defer view.Close()
 
-	sift := x.NewSIFT()
-	defer sift.Close()
+		kpView, desView = sift.DetectAndCompute(view, gocv.NewMat())
+
+		wg.Done()
+	}()
+
+	go func() {
+		sift := x.NewSIFT()
+		defer sift.Close()
+
+		screen, _ := gocv.ImageGrayToMatGray(rgbaToGray(screenImage))
+		defer screen.Close()
+
+		kpScreen, desScreen = sift.DetectAndCompute(screen, gocv.NewMat())
+
+		wg.Done()
+	}()
 
 	bf := gocv.NewBFMatcher()
 	defer bf.Close()
 
-	kpView, desView := sift.DetectAndCompute(view, gocv.NewMat())
-	kpScreen, desScreen := sift.DetectAndCompute(screen, gocv.NewMat())
+	wg.Wait()
 
 	matches := bf.KnnMatch(desView, desScreen, 2)
 

@@ -97,6 +97,8 @@ def run(orig_image):
 
     pb_np = np.array(imo)
 
+    del d1,d2,d3,d4,d5,d6,d7
+
     return imo
 
 

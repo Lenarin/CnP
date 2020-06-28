@@ -42,7 +42,7 @@ func main() {
 
 	var pasteImage image.Image
 
-	mode := 0 // 0 - production mode; 1 - presentation mode; 2 - debug mode
+	mode := 2 // 0 - production mode; 1 - presentation mode; 2 - debug mode
 
 	app.Post("/image", func(c *fiber.Ctx) {
 		file, err := c.FormFile("data")
@@ -236,6 +236,8 @@ func main() {
 				goscp.DebugFindPoints(&view, &temp, width, height)
 			}
 		}()
+
+		return
 
 	})
 
