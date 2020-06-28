@@ -13,5 +13,5 @@ require (
 	github.com/lxn/win v0.0.0-20191128105842-2da648fda5b4 // indirect
 	github.com/valyala/fasttemplate v1.1.1 // indirect
 	gocv.io/x/gocv v0.23.1-0.20200605153240-564be66d2331
-	golang.org/x/sys v0.0.0-20200620081246-981b61492c35 // indirect
+	golang.org/x/sys v0.0.0-20200622214017-ed371f2e16b4 // indirect
 )
