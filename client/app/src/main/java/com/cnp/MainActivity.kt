@@ -1,35 +1,33 @@
 package com.cnp
 
 import android.Manifest
-import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.os.Bundle
-import android.util.Base64
+import android.opengl.Visibility
+import android.os.*
+import android.os.Handler
 import android.util.Log
-import android.view.Window
-import android.view.WindowManager
+import android.view.View.GONE
+import android.view.View.VISIBLE
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.camera.core.*
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.core.view.isVisible
 import com.github.kittinunf.fuel.Fuel
-import com.github.kittinunf.fuel.core.BlobDataPart
-import com.github.kittinunf.fuel.core.DataPart
-import com.github.kittinunf.fuel.core.FileDataPart
-import com.github.kittinunf.fuel.core.InlineDataPart
-import com.github.kittinunf.fuel.httpPost
+import com.github.kittinunf.fuel.core.*
+import com.github.kittinunf.fuel.httpGet
+import com.github.kittinunf.fuel.httpUpload
 import kotlinx.android.synthetic.main.activity_main.*
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
-import java.io.File
-import java.io.FileOutputStream
-import java.net.URL
-import java.text.SimpleDateFormat
-import java.util.*
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.async
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
+import java.io.*
+import java.nio.MappedByteBuffer
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 
@@ -38,10 +36,16 @@ class MainActivity : AppCompatActivity() {
     private var preview: Preview? = null
     private var imageCapture: ImageCapture? = null
     private var camera: Camera? = null
-    private var serverAddress = "http://192.168.1.33"
+    private var serverAddress = "http://192.168.1.28"
 
-    private lateinit var outputDirectory: File
     private lateinit var cameraExecutor: ExecutorService
+
+    private var currentState = "image"
+
+    private var imageWidth = 600
+    private var imageHeight = 600
+
+    public var h = Handler()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -57,11 +61,10 @@ class MainActivity : AppCompatActivity() {
         }
 
         // Setup the listener for take photo button
-        camera_capture_button.setOnClickListener { takePhoto() }
-
-        outputDirectory = getOutputDirectory()
+        viewFinder.setOnClickListener { takePhoto() }
 
         cameraExecutor = Executors.newSingleThreadExecutor()
+
     }
 
     override fun onRequestPermissionsResult(
@@ -90,7 +93,9 @@ class MainActivity : AppCompatActivity() {
 
             preview = Preview.Builder().build()
 
-            imageCapture = ImageCapture.Builder().build()
+            imageCapture = ImageCapture.Builder().apply {
+                setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            }.build()
 
             val cameraSelector = CameraSelector.Builder().requireLensFacing(CameraSelector.LENS_FACING_BACK).build()
 
@@ -117,42 +122,93 @@ class MainActivity : AppCompatActivity() {
                     Log.e(TAG, "Photo capture failed: ${exc.message}", exc)
                 }
 
-                override fun onCaptureSuccess(image: ImageProxy) {
+                override  fun onCaptureSuccess(image: ImageProxy) {
+                    progressBar.visibility = VISIBLE
+                    progressBar.progress = 0
+
                     val imageBitmap = imageProxyToBitmap(image)!!
-                    imagePreview.setImageBitmap(imageBitmap)
 
-                    val os = ByteArrayOutputStream()
-                    imageBitmap.compress(Bitmap.CompressFormat.PNG, 100, os)
-                    val fis = ByteArrayInputStream(os.toByteArray())
+                    val bos = ByteArrayOutputStream()
 
-                    Log.d("DEBUG", "START SENDING")
-                    Fuel.upload("$serverAddress/cut")
-                        .add(BlobDataPart(fis, name = "data"))
-                        .response { request, response, result ->
-                            println(request)
-                            println(response)
-                            val (bytes, error) = result
-                            if (bytes != null) {
-                                println("[response bytes] ${String(bytes)}")
+                    imageBitmap.compress(Bitmap.CompressFormat.JPEG, 100, bos)
+
+                    val ba = bos.toByteArray()
+
+                    val length = ba.size
+
+                    val bis = ByteArrayInputStream(ba)
+
+                    if (currentState == "image") {
+                        Fuel.upload("$serverAddress/image")
+                            .add(BlobDataPart(bis, name = "data", filename = "image.jpg", contentLength = length.toLong()))
+                            .requestProgress{readBytes, totalBytes ->
+                                val progress = readBytes.toFloat() / totalBytes.toFloat() * 50
+                                h.post {progressBar.progress = progress.toInt()}
                             }
-                        }
-
+                            .responseProgress {readBytes, totalBytes ->
+                                val progress = readBytes.toFloat() / totalBytes.toFloat() * 50 + 50
+                                h.post {progressBar.progress = progress.toInt()}
+                            }
+                            .response { result ->
+                                val (bytes, error) = result
+                                if (error != null) {
+                                    println("[error] $error")
+                                } else {
+                                    val res = BitmapFactory.decodeByteArray(bytes, 0, bytes!!.count())
+                                    //runOnUiThread {imagePreview.setImageBitmap(res)}
+                                    h.post {
+                                        imagePreview.setImageBitmap(res)
+                                        progressBar.visibility = GONE
+                                        if (res.width > res.height) {
+                                            imageWidth = 600
+                                            imageHeight = res.height * imageWidth / res.width
+                                        } else {
+                                            imageHeight = 600
+                                            imageWidth = res.width * imageHeight / res.height
+                                        }
+                                        currentState = "view"
+                                    }
+                                }
+                            }
+                    }
+                    else if (currentState == "view") {
+                        Fuel.upload("$serverAddress/view")
+                            .add(BlobDataPart(bis, name = "data", filename = "image.jpg", contentLength = length.toLong()))
+                            .add(InlineDataPart(imageHeight.toString(), name = "height"))
+                            .add(InlineDataPart(imageWidth.toString(), name = "width"))
+                            .requestProgress{readBytes, totalBytes ->
+                                val progress = readBytes.toFloat() / totalBytes.toFloat() * 50
+                                h.post {progressBar.progress = progress.toInt()}
+                            }
+                            .responseProgress {readBytes, totalBytes ->
+                                val progress = readBytes.toFloat() / totalBytes.toFloat() * 50 + 50
+                                h.post {progressBar.progress = progress.toInt()}
+                            }
+                            .response { result ->
+                                val (bytes, error) = result
+                                if (error != null) {
+                                    println("[error] $error")
+                                } else {
+                                    h.post {
+                                        imagePreview.setImageDrawable(null)
+                                        progressBar.visibility = GONE
+                                        currentState = "image"
+                                    }
+                                }
+                            }
+                    }
                     image.close()
+
                 }
             }
         )
     }
 
+
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
     }
 
-    private fun getOutputDirectory(): File {
-        val mediaDir = externalMediaDirs.firstOrNull()?.let {
-            File(it, resources.getString(R.string.app_name)).apply { mkdirs() } }
-        return if (mediaDir != null && mediaDir.exists())
-            mediaDir else filesDir
-    }
 
     private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
         val planeProxy = image.planes[0]
@@ -160,13 +216,6 @@ class MainActivity : AppCompatActivity() {
         val bytes = ByteArray(buffer.remaining())
         buffer[bytes]
         return BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-    }
-
-    private fun bitmapToString(bitmap: Bitmap): String {
-        val byteArrayOutputStream = ByteArrayOutputStream()
-        bitmap.compress(Bitmap.CompressFormat.PNG, 100, byteArrayOutputStream)
-        val imageBytes = byteArrayOutputStream.toByteArray()
-        return Base64.encodeToString(imageBytes, Base64.DEFAULT)
     }
 
     companion object {

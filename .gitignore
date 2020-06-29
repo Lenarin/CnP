@@ -1,3 +1,4 @@
 .vscode
 U-2-Net
 __pycache__
+*.code-workspace
